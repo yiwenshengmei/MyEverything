@@ -56,7 +56,7 @@ namespace MyEverything {
 				PInvokeWin32.ZeroMemory(prujd, Marshal.SizeOf(rujd));
 				Marshal.StructureToPtr(rujd, prujd, true);
 
-				Debug.WriteLine("\nMoniting on {0}......", volume as object);
+				Debug.WriteLine(string.Format("\nMoniting on {0}......", volume));
 				IntPtr pVolume = MyEverything.GetVolumeJournalHandle(volume);
 
 				bool fok = PInvokeWin32.DeviceIoControl(pVolume,
@@ -64,12 +64,12 @@ namespace MyEverything {
 					prujd, Marshal.SizeOf(typeof(PInvokeWin32.READ_USN_JOURNAL_DATA)),
 					pbuffer, 0x1000, out cbRead, IntPtr.Zero);
 
-				IntPtr pRealData = pbuffer + Marshal.SizeOf(typeof(Int64)); // 返回的内存块头上的8个字节是一个usn_id, 从第9个字节开始才是record.
+				IntPtr pRealData = new IntPtr(pbuffer.ToInt32() + Marshal.SizeOf(typeof(Int64))); // 返回的内存块头上的8个字节是一个usn_id, 从第9个字节开始才是record.
 				uint offset = 0;
 
 				if (fok) {
 					while (offset + Marshal.SizeOf(typeof(Int64)) < cbRead) { // record可能有多个!
-						PInvokeWin32.USN_RECORD usn = new PInvokeWin32.USN_RECORD(pRealData + (int) offset);
+						PInvokeWin32.USN_RECORD usn = new PInvokeWin32.USN_RECORD(new IntPtr(pRealData.ToInt32() + (int) offset));
 						ProcessUSN(usn, volume, db);
 						offset += usn.RecordLength;
 					}
@@ -81,9 +81,9 @@ namespace MyEverything {
 		}
 		private void ProcessUSN(PInvokeWin32.USN_RECORD usn, string volume, MyEverythingDB db) {
 			var dbCached = db.FindByFrn(volume, usn.FRN);
-			Debug.WriteLine("------USN[frn={0}]------", usn.FRN);
-			Debug.WriteLine("FileName={0}, Reason={1}", usn.FileName, Reason.ReasonPrettyFormat(usn.Reason));
-			Debug.WriteLine("FileName[Cached]={0}", dbCached == null ? "NoCache" as object : dbCached.FullPath as object);
+			Debug.WriteLine(string.Format("------USN[frn={0}]------", usn.FRN));
+			Debug.WriteLine(string.Format("FileName={0}, Reason={1}", usn.FileName, Reason.ReasonPrettyFormat(usn.Reason)));
+			Debug.WriteLine(string.Format("FileName[Cached]={0}", dbCached == null ? "NoCache": dbCached.FullPath));
 			Debug.WriteLine("--------------------------------------");
 
 			if (Util.MaskEqual(usn.Reason, Reason.USN_REASONS["USN_REASON_RENAME_NEW_NAME"]))
@@ -99,7 +99,7 @@ namespace MyEverything {
 				return;
 			} else {
 				var isdelete = db.DeleteRecord(volume, usn.FRN);
-				Debug.WriteLine(">>>> File {0} deleted {1}.", cached.FullPath, isdelete ? "successful" : "fail");
+				Debug.WriteLine(string.Format(">>>> File {0} deleted {1}.", cached.FullPath, isdelete ? "successful" : "fail"));
 				if (RecordDeletedEvent != null)
 					RecordDeletedEvent(cached);
 			}
@@ -115,12 +115,12 @@ namespace MyEverything {
 			newRecord.FullPath = fullpath;
 			var oldRecord = db.FindByFrn(volume, usn.FRN);
 			string newname = newRecord.FullPath;
-			Debug.WriteLine(">>>> RenameFile {0} to {1}", oldRecord.FullPath, newname);
+			Debug.WriteLine(string.Format(">>>> RenameFile {0} to {1}", oldRecord.FullPath, newname));
 			db.UpdateRecord(volume, newRecord, 
 				usn.IsFolder ? MyEverythingRecordType.Folder : MyEverythingRecordType.File);
 			if (RecordRenameEvent != null) RecordRenameEvent(oldRecord, newRecord);
 			if (newname.Contains("$RECYCLE.BIN")) {
-				Debug.WriteLine(">>>> Means {0} moved to recycle.", oldRecord.FullPath as object);
+				Debug.WriteLine(string.Format(">>>> Means {0} moved to recycle.", oldRecord.FullPath));
 			}
 		}
 		private void ProcessFileCreate(PInvokeWin32.USN_RECORD usn, string volume, MyEverythingDB db) {
@@ -129,7 +129,7 @@ namespace MyEverything {
 			db.FindRecordPath(record, ref fullpath, db.GetFolderSource(volume));
 			record.FullPath = fullpath;
 			db.AddRecord(volume, record, usn.IsFolder ? MyEverythingRecordType.Folder : MyEverythingRecordType.File);
-			Debug.WriteLine(">>>> NewFile: {0}", record.FullPath as object);
+			Debug.WriteLine(string.Format(">>>> NewFile: {0}", record.FullPath));
 			if (RecordAddedEvent != null)
 				RecordAddedEvent(record);
 		}
