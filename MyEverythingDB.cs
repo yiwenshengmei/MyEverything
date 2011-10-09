@@ -9,7 +9,7 @@ namespace MyEverything {
 		File, Folder
 	}
 	
-	class MyEverythingDB {
+	public class MyEverythingDB {
 		private Dictionary<string, Dictionary<ulong, MyEverythingRecord>> _volumes_files = new Dictionary<string, Dictionary<ulong, MyEverythingRecord>>();
 		private Dictionary<string, Dictionary<ulong, MyEverythingRecord>> _volumes_folders = new Dictionary<string, Dictionary<ulong, MyEverythingRecord>>();
 
@@ -18,7 +18,6 @@ namespace MyEverything {
 		public bool ContainsVolume(string volume) {
 			return _volumes_files.ContainsKey(volume) && _volumes_folders.ContainsKey(volume);
 		}
-
 		public void AddRecord(string volume, List<MyEverythingRecord> r, MyEverythingRecordType type) {
 			if (type == MyEverythingRecordType.File) {
 				CheckHashTableKey(_volumes_files, volume);
@@ -28,7 +27,6 @@ namespace MyEverything {
 				r.ForEach(x => _volumes_folders[volume].Add(x.FRN, x));
 			}
 		}
-
 		public void AddRecord(string volume, MyEverythingRecord record, MyEverythingRecordType type) {
 			if (type == MyEverythingRecordType.File) {
 				CheckHashTableKey(_volumes_files, volume);
@@ -38,7 +36,6 @@ namespace MyEverything {
 				_volumes_folders[volume].Add(record.FRN, record);
 			}
 		}
-
 		private void CheckHashTableKey(Dictionary<string, Dictionary<ulong, MyEverythingRecord>> hashtable, string key) {
 			if (!hashtable.ContainsKey(key)) 
 				hashtable.Add(key, new Dictionary<ulong,MyEverythingRecord>());
@@ -71,33 +68,6 @@ namespace MyEverything {
 				return false;
 			}
 		}
-		public void BuildPath() {
-			foreach (var pair in _volumes_files) {
-				var fileRecords = pair.Value.Values.ToList();
-				var fldSource = _volumes_folders[pair.Key];
-				foreach (MyEverythingRecord file in fileRecords) {
-					string fullpath = file.Name;
-					MyEverythingRecord fstDir = null;
-					if (fldSource.TryGetValue(file.ParentFrn, out fstDir)) {
-						if (fstDir.IsVolumeRoot) { // 针对根目录下的文件
-							file.FullPath = string.Format("{0}{1}{2}", fstDir.Name, Path.DirectorySeparatorChar, fullpath);
-						} else {
-							FindRecordPath(fstDir, ref fullpath, fldSource);
-							file.FullPath = fullpath;
-						}
-					} else {
-						file.FullPath = fullpath;
-					}
-				}
-			}
-		}
-		public void FindRecordPath(MyEverythingRecord curRecord, ref string fullpath, Dictionary<ulong, MyEverythingRecord> fdSource) {
-			if (curRecord.IsVolumeRoot) return;
-			MyEverythingRecord nextRecord = null;
-			if (!fdSource.TryGetValue(curRecord.ParentFrn, out nextRecord)) return;
-			fullpath = string.Format("{0}{1}{2}", nextRecord.Name, Path.DirectorySeparatorChar, fullpath);
-			FindRecordPath(nextRecord, ref fullpath, fdSource);
-		}
 		public List<MyEverythingRecord> FindByName(string filename, out long foundFileCnt, out long fountFolderCnt) {
 
 			var fileQuery = from filesInVolumeDic in _volumes_files.Values
@@ -106,22 +76,17 @@ namespace MyEverything {
 							select eachFilePair.Value;
 
 			var folderQuery = from dirsInVolumeDic in _volumes_folders.Values
-						   from eachDirPair in dirsInVolumeDic
-						   where eachDirPair.Value.Name.Contains(filename)
-						   select eachDirPair.Value;
+							  from eachDirPair in dirsInVolumeDic
+						      where eachDirPair.Value.Name.Contains(filename)
+						      select eachDirPair.Value;
 
 			foundFileCnt = fileQuery.Count();
 			fountFolderCnt = folderQuery.Count();
 
 			List<MyEverythingRecord> result = new List<MyEverythingRecord>();
 
-
-			foreach (var r in fileQuery) {
-				result.Add(r);
-			}
-			foreach (var r in folderQuery) {
-				result.Add(r);
-			}
+			result.AddRange(fileQuery);
+			result.AddRange(folderQuery);
 
 			return result;
 		}
@@ -140,7 +105,6 @@ namespace MyEverything {
 		public long FolderCount {
 			get { return _volumes_folders.Sum(x => x.Value.Count); }
 		}
-
 		public Dictionary<ulong, MyEverythingRecord> GetFolderSource(string volume) {
 			Dictionary<ulong, MyEverythingRecord> result = null;
 			_volumes_folders.TryGetValue(volume, out result);

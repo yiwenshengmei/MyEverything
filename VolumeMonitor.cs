@@ -5,6 +5,7 @@ using System.Text;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Diagnostics;
+using System.IO;
 
 namespace MyEverything {
 	class VolumeMonitor {
@@ -21,7 +22,6 @@ namespace MyEverything {
 				th.Start(new Dictionary<string, object> { { "Volume", volume }, { "MyEverythingDB", db } });
 			}
 		}
-
 		private PInvokeWin32.READ_USN_JOURNAL_DATA SetupInputData4JournalRead(string volume, uint reason) {
 			IntPtr pMonitorVolume = MyEverything.GetVolumeJournalHandle(volume);
 			uint bytesReturned = 0;
@@ -39,7 +39,6 @@ namespace MyEverything {
 
 			return rujd;
 		}
-
 		private void MonitorThread(object param) {
 
 			MyEverythingDB db = (param as Dictionary<string, object>)["MyEverythingDB"] as MyEverythingDB;
@@ -81,6 +80,7 @@ namespace MyEverything {
 		}
 		private void ProcessUSN(PInvokeWin32.USN_RECORD usn, string volume, MyEverythingDB db) {
 			var dbCached = db.FindByFrn(volume, usn.FRN);
+			MyEverything.FillPath(volume, dbCached, db);
 			Debug.WriteLine(string.Format("------USN[frn={0}]------", usn.FRN));
 			Debug.WriteLine(string.Format("FileName={0}, Reason={1}", usn.FileName, Reason.ReasonPrettyFormat(usn.Reason)));
 			Debug.WriteLine(string.Format("FileName[Cached]={0}", dbCached == null ? "NoCache": dbCached.FullPath));
@@ -98,37 +98,36 @@ namespace MyEverything {
 			if (cached == null) {
 				return;
 			} else {
-				var isdelete = db.DeleteRecord(volume, usn.FRN);
-				Debug.WriteLine(string.Format(">>>> File {0} deleted {1}.", cached.FullPath, isdelete ? "successful" : "fail"));
+				MyEverything.FillPath(volume, cached, db);
+				var deleteok = db.DeleteRecord(volume, usn.FRN);
+				Debug.WriteLine(string.Format(">>>> File {0} deleted {1}.", cached.FullPath, deleteok ? "successful" : "fail"));
 				if (RecordDeletedEvent != null)
 					RecordDeletedEvent(cached);
 			}
 		}
 		private void ProcessRenameNewName(PInvokeWin32.USN_RECORD usn, string volume, MyEverythingDB db) { 
-			// frn 没有改变
-			// newname = usn.FileName
-			// 根据usn.FRN可以从db中获取oldname
-			// db.update...
-			MyEverythingRecord newRecord = MyEverythingRecord.ParseUSN(usn);
-			string fullpath = newRecord.Name;
-			db.FindRecordPath(newRecord, ref fullpath, db.GetFolderSource(volume));
-			newRecord.FullPath = fullpath;
+			MyEverythingRecord newRecord = MyEverythingRecord.ParseUSN(volume, usn);
+			//string fullpath = newRecord.Name;
+			//db.FindRecordPath(newRecord, ref fullpath, db.GetFolderSource(volume));
+			//newRecord.FullPath = fullpath;
 			var oldRecord = db.FindByFrn(volume, usn.FRN);
-			string newname = newRecord.FullPath;
-			Debug.WriteLine(string.Format(">>>> RenameFile {0} to {1}", oldRecord.FullPath, newname));
+			MyEverything.FillPath(volume, oldRecord, db);
+			MyEverything.FillPath(volume, newRecord, db);
+			Debug.WriteLine(string.Format(">>>> RenameFile {0} to {1}", oldRecord.FullPath, newRecord.FullPath));
 			db.UpdateRecord(volume, newRecord, 
 				usn.IsFolder ? MyEverythingRecordType.Folder : MyEverythingRecordType.File);
 			if (RecordRenameEvent != null) RecordRenameEvent(oldRecord, newRecord);
-			if (newname.Contains("$RECYCLE.BIN")) {
+			if (newRecord.FullPath.Contains("$RECYCLE.BIN")) {
 				Debug.WriteLine(string.Format(">>>> Means {0} moved to recycle.", oldRecord.FullPath));
 			}
 		}
 		private void ProcessFileCreate(PInvokeWin32.USN_RECORD usn, string volume, MyEverythingDB db) {
-			MyEverythingRecord record = MyEverythingRecord.ParseUSN(usn);
-			string fullpath = record.Name;
-			db.FindRecordPath(record, ref fullpath, db.GetFolderSource(volume));
-			record.FullPath = fullpath;
+			MyEverythingRecord record = MyEverythingRecord.ParseUSN(volume, usn);
+			//string fullpath = record.Name;
+			//db.FindRecordPath(record, ref fullpath, db.GetFolderSource(volume));
+			//record.FullPath = fullpath;
 			db.AddRecord(volume, record, usn.IsFolder ? MyEverythingRecordType.Folder : MyEverythingRecordType.File);
+			MyEverything.FillPath(volume, record, db);
 			Debug.WriteLine(string.Format(">>>> NewFile: {0}", record.FullPath));
 			if (RecordAddedEvent != null)
 				RecordAddedEvent(record);

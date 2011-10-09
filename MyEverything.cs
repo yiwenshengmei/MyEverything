@@ -33,8 +33,8 @@ namespace MyEverything {
 				db.AddRecord(volume, files, MyEverythingRecordType.File);
 				db.AddRecord(volume, folders, MyEverythingRecordType.Folder);
 				
-				Console.WriteLine("Indexing {0}...", volume);
-				db.BuildPath();
+				//Console.WriteLine("Indexing {0}...", volume);
+				//db.BuildPath();
 			}
 			Console.WriteLine("{0}s file and {1} folder indexed, {2}ms has spent.", 
 				db.FileCount, db.FolderCount, DateTime.Now.Subtract(enumFilesTimeStart).TotalMilliseconds);
@@ -57,6 +57,7 @@ namespace MyEverything {
 						if (!string.IsNullOrEmpty(cmd[1])) {
 							var searchtimestart = DateTime.Now;
 							found = db.FindByName(cmd[1], out fileFoundCnt, out folderFoundCnt);
+							found.ForEach(x => FillPath(x.VolumeName, x, db));
 							var searchtimeend = DateTime.Now;
 							if (cmd.Length == 3 && !string.IsNullOrEmpty(cmd[2])) {
 								using (StreamWriter sw = new StreamWriter(cmd[2], false)) {
@@ -97,31 +98,6 @@ namespace MyEverything {
 			}
 		}
 
-		private static void FindPath(MyEverythingRecord currRecord, ref string fullpath, Dictionary<ulong, MyEverythingRecord> dirSource) {
-			if (currRecord.IsVolumeRoot) return;
-			MyEverythingRecord nextRecord = null;
-			if (!dirSource.TryGetValue(currRecord.ParentFrn, out nextRecord)) return;
-			fullpath = string.Format("{0}{1}{2}", nextRecord.Name, Path.DirectorySeparatorChar, fullpath);
-			FindPath(nextRecord, ref fullpath, dirSource);
-		}
-		public static void ConvertFrn2FullPath(List<MyEverythingRecord> fileRecords, Dictionary<ulong, MyEverythingRecord> dirSource) {
-			foreach (MyEverythingRecord file in fileRecords) {
-				string fullpath = file.Name;
-				MyEverythingRecord fstDir = null;
-				if (dirSource.TryGetValue(file.ParentFrn, out fstDir)) {
-					if (fstDir.IsVolumeRoot) { // 针对根目录下的文件
-						file.FullPath = string.Format("{0}{1}{2}", fstDir.Name, Path.DirectorySeparatorChar, fullpath);
-					} else {
-						FindPath(fstDir, ref fullpath, dirSource);
-						file.FullPath = fullpath;
-					}
-				} else {
-					file.FullPath = fullpath;
-					//Console.WriteLine("Can't find {0}'s parent folder.", file.Name);
-				}
-			}
-			var t1 = fileRecords.Where(x => x.Name == "guestbook.js").FirstOrDefault();
-		}
 		private static void AddVolumeRootRecord(string volumeName, ref List<MyEverythingRecord> dirs) {
 		    string rightVolumeName = string.Concat("\\\\.\\", volumeName);
 		    rightVolumeName = string.Concat(rightVolumeName, Path.DirectorySeparatorChar);
@@ -140,7 +116,8 @@ namespace MyEverything {
 		            UInt64 fileIndexHigh = (UInt64)fi.FileIndexHigh;
 		            UInt64 indexRoot = (fileIndexHigh << 32) | fi.FileIndexLow;
 
-					dirs.Add(new MyEverythingRecord { FRN = indexRoot, Name = volumeName, ParentFrn = 0, IsVolumeRoot = true });
+					dirs.Add(new MyEverythingRecord { FRN = indexRoot, Name = volumeName, ParentFrn = 0, 
+						IsVolumeRoot = true, IsFolder = true, VolumeName = volumeName });
 		        } else {
 		            throw new IOException("GetFileInformationbyHandle() returned invalid handle",
 		                new Win32Exception(Marshal.GetLastWin32Error()));
@@ -150,18 +127,18 @@ namespace MyEverything {
 		        throw new IOException("Unable to get root frn entry", new Win32Exception(Marshal.GetLastWin32Error()));
 		    }
 		}
-		public static void EnumerateVolume(string volumeName, out List<MyEverythingRecord> files, out List<MyEverythingRecord> dirs) {
+		public static void EnumerateVolume(string volumeName, out List<MyEverythingRecord> files, out List<MyEverythingRecord> flds) {
 			files = new List<MyEverythingRecord>();
-			dirs = new List<MyEverythingRecord>();
+			flds = new List<MyEverythingRecord>();
 			IntPtr medBuffer = IntPtr.Zero;
 			IntPtr pVolume   = IntPtr.Zero;
 			try {
-				AddVolumeRootRecord(volumeName, ref dirs); // 获得指定的 volume 对应的 frn, 为将来确定 full path 时提供支持.
+				AddVolumeRootRecord(volumeName, ref flds); // 获得指定的 volume 对应的 frn, 为将来确定 full path 时提供支持.
 				pVolume = GetVolumeJournalHandle(volumeName); // 获得通过 CreateFile 函数返回的 handle 值.
 				EnableVomuleJournal(pVolume); // 打开 Journal, 因为 Journal 默认是关闭的.
 
 				SetupMFTEnumInBuffer(ref medBuffer, pVolume); // 为 EnumerateFiles 准备好参数, 即 medBuffer
-				EnumerateFiles(pVolume, medBuffer, ref files, ref dirs);
+				EnumerateFiles(volumeName, pVolume, medBuffer, ref files, ref flds);
 			} catch (Exception e) {
 				Console.WriteLine(e.Message, e);
 				Exception innerException = e.InnerException;
@@ -244,7 +221,7 @@ namespace MyEverything {
 				throw new IOException("DeviceIoControl() returned false", new Win32Exception(Marshal.GetLastWin32Error()));
 			}
 		}
-		unsafe private static void EnumerateFiles(IntPtr pVolume, IntPtr medBuffer, ref List<MyEverythingRecord> files, ref List<MyEverythingRecord> folders) {
+		unsafe private static void EnumerateFiles(string volumeName, IntPtr pVolume, IntPtr medBuffer, ref List<MyEverythingRecord> files, ref List<MyEverythingRecord> folders) {
 			IntPtr pData = Marshal.AllocHGlobal(sizeof(UInt64) + 0x10000);
 			PInvokeWin32.ZeroMemory(pData, sizeof(UInt64) + 0x10000);
 			uint outBytesReturned = 0;
@@ -260,13 +237,15 @@ namespace MyEverything {
 						folders.Add(new MyEverythingRecord {
 							Name = usn.FileName,
 							ParentFrn = usn.ParentFRN,
-							FRN = usn.FRN
+							FRN = usn.FRN,
+							IsFolder = true, VolumeName = volumeName
 						});
 					} else {
 						files.Add(new MyEverythingRecord {
 							Name = usn.FileName,
 							ParentFrn = usn.ParentFRN,
-							FRN = usn.FRN
+							FRN = usn.FRN,
+							IsFolder = false, VolumeName = volumeName
 						});
 					}
 
@@ -276,6 +255,21 @@ namespace MyEverything {
 				Marshal.WriteInt64(medBuffer, Marshal.ReadInt64(pData, 0));
 			}
 			Marshal.FreeHGlobal(pData);
+		}
+		public static void FillPath(string volume, MyEverythingRecord record, MyEverythingDB db) {
+			if (record == null) return;
+			var fdSource = db.GetFolderSource(volume);
+			string fullpath = record.Name;
+			FindRecordPath(record, ref fullpath, fdSource);
+			record.FullPath = fullpath;
+		}
+		private static void FindRecordPath(MyEverythingRecord curRecord, ref string fullpath, Dictionary<ulong, MyEverythingRecord> fdSource) {
+			if (curRecord.IsVolumeRoot) return;
+			MyEverythingRecord nextRecord = null;
+			if (!fdSource.TryGetValue(curRecord.ParentFrn, out nextRecord))
+				return;
+			fullpath = string.Format("{0}{1}{2}", nextRecord.Name, Path.DirectorySeparatorChar, fullpath);
+			FindRecordPath(nextRecord, ref fullpath, fdSource);
 		}
 	}
 }
