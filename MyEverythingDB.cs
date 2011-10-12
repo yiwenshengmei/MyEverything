@@ -75,10 +75,10 @@ namespace MyEverything {
 							where eachFilePair.Value.Name.Contains(filename)
 							select eachFilePair.Value;
 
-			var folderQuery = from dirsInVolumeDic in _volumes_folders.Values
-							  from eachDirPair in dirsInVolumeDic
-						      where eachDirPair.Value.Name.Contains(filename)
-						      select eachDirPair.Value;
+			var folderQuery = from fldsInVolumeDic in _volumes_folders.Values
+							  from eachFldPair in fldsInVolumeDic
+						      where eachFldPair.Value.Name.Contains(filename)
+						      select eachFldPair.Value;
 
 			foundFileCnt = fileQuery.Count();
 			fountFolderCnt = folderQuery.Count();

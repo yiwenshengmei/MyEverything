@@ -11,15 +11,10 @@ namespace MyEverything {
 
 		static void Main(string[] args) {
 
-			Console.Write("Input Volumes for Scan (eg: C: D: E:): ");
+			Console.Write("Volumes for Scan (eg: C: D: E:): ");
 			List<string> volumes = Console.ReadLine().ToUpper().Split(new char[] {' '}).ToList();
 
-			// 因为不同分区可能存在相同的 frn, 所以一定要把不同分区的数据分开保存
-			// 每个分区是一个 List<MyEverythingRecord>
-			Dictionary<string, List<MyEverythingRecord>> allVolumeFiles = new Dictionary<string, List<MyEverythingRecord>>();
-			Dictionary<string, List<MyEverythingRecord>> allVolumeDirs = new Dictionary<string, List<MyEverythingRecord>>();
 			MyEverythingDB db = new MyEverythingDB();
-
 
 			// ----------------遍历 mft，找到指定 volume 上的所有文件和文件夹----------------
 			Console.WriteLine("Note: If this is your first time run, it will take some time to open the NTFS Journal System.");
@@ -32,9 +27,7 @@ namespace MyEverything {
 				
 				db.AddRecord(volume, files, MyEverythingRecordType.File);
 				db.AddRecord(volume, folders, MyEverythingRecordType.Folder);
-				
-				//Console.WriteLine("Indexing {0}...", volume);
-				//db.BuildPath();
+
 			}
 			Console.WriteLine("{0}s file and {1} folder indexed, {2}ms has spent.", 
 				db.FileCount, db.FolderCount, DateTime.Now.Subtract(enumFilesTimeStart).TotalMilliseconds);
@@ -98,7 +91,7 @@ namespace MyEverything {
 			}
 		}
 
-		private static void AddVolumeRootRecord(string volumeName, ref List<MyEverythingRecord> dirs) {
+		private static void AddVolumeRootRecord(string volumeName, ref List<MyEverythingRecord> folders) {
 		    string rightVolumeName = string.Concat("\\\\.\\", volumeName);
 		    rightVolumeName = string.Concat(rightVolumeName, Path.DirectorySeparatorChar);
 		    IntPtr hRoot = PInvokeWin32.CreateFile(rightVolumeName,
@@ -116,7 +109,7 @@ namespace MyEverything {
 		            UInt64 fileIndexHigh = (UInt64)fi.FileIndexHigh;
 		            UInt64 indexRoot = (fileIndexHigh << 32) | fi.FileIndexLow;
 
-					dirs.Add(new MyEverythingRecord { FRN = indexRoot, Name = volumeName, ParentFrn = 0, 
+					folders.Add(new MyEverythingRecord { FRN = indexRoot, Name = volumeName, ParentFrn = 0, 
 						IsVolumeRoot = true, IsFolder = true, VolumeName = volumeName });
 		        } else {
 		            throw new IOException("GetFileInformationbyHandle() returned invalid handle",
