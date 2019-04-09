@@ -56,8 +56,8 @@ namespace MyEverything {
 												  IntPtr lpOutBuffer, Int32 nOutBufferSize,
 												  out uint lpBytesReturned, IntPtr lpOverlapped);
 
-		[DllImport("kernel32.dll")]
-		public static extern void ZeroMemory(IntPtr ptr, Int32 size);
+		[DllImport("Kernel32.dll", EntryPoint="RtlZeroMemory", SetLastError=false)]
+		public static extern void ZeroMemory(IntPtr dest, IntPtr size);
 
 		[StructLayout(LayoutKind.Sequential, Pack = 1)]
 		public struct BY_HANDLE_FILE_INFORMATION {
@@ -159,7 +159,7 @@ namespace MyEverything {
 				this.FileNameLength = (UInt16)Marshal.ReadInt16(p, FileNameLength_OFFSET);
 				this.FileNameOffset = (UInt16)Marshal.ReadInt16(p, FileNameOffset_OFFSET);
 
-				this.FileName = Marshal.PtrToStringUni(new IntPtr(p.ToInt32() + this.FileNameOffset), this.FileNameLength / sizeof(char));
+				this.FileName = Marshal.PtrToStringUni(new IntPtr(p.ToInt64() + this.FileNameOffset), this.FileNameLength / sizeof(char));
 			}
 
 			public bool IsFolder {

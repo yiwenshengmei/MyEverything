@@ -52,7 +52,7 @@ namespace MyEverything {
 
 				// 构建输入参数的指针
 				prujd = Marshal.AllocHGlobal(Marshal.SizeOf(rujd));
-				PInvokeWin32.ZeroMemory(prujd, Marshal.SizeOf(rujd));
+				PInvokeWin32.ZeroMemory(prujd, (IntPtr) Marshal.SizeOf(rujd));
 				Marshal.StructureToPtr(rujd, prujd, true);
 
 				Debug.WriteLine(string.Format("\nMoniting on {0}......", volume));

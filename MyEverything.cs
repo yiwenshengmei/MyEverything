@@ -175,7 +175,7 @@ namespace MyEverything {
 
 			int sizeCujd = Marshal.SizeOf(cujd);
 			IntPtr cujdBuffer = Marshal.AllocHGlobal(sizeCujd);
-			PInvokeWin32.ZeroMemory(cujdBuffer, sizeCujd);
+			PInvokeWin32.ZeroMemory(cujdBuffer, (IntPtr) sizeCujd);
 			Marshal.StructureToPtr(cujd, cujdBuffer, true);
 
 			bool fOk = PInvokeWin32.DeviceIoControl(pVolume, PInvokeWin32.FSCTL_CREATE_USN_JOURNAL,
@@ -208,7 +208,7 @@ namespace MyEverything {
 				med.HighUsn = ujd.NextUsn;
 				int sizeMftEnumData = Marshal.SizeOf(med);
 				medBuffer = Marshal.AllocHGlobal(sizeMftEnumData);
-				PInvokeWin32.ZeroMemory(medBuffer, sizeMftEnumData);
+				PInvokeWin32.ZeroMemory(medBuffer, (IntPtr) sizeMftEnumData);
 				Marshal.StructureToPtr(med, medBuffer, true);
 			} else {
 				throw new IOException("DeviceIoControl() returned false", new Win32Exception(Marshal.GetLastWin32Error()));
@@ -216,13 +216,13 @@ namespace MyEverything {
 		}
 		unsafe private static void EnumerateFiles(string volumeName, IntPtr pVolume, IntPtr medBuffer, ref List<MyEverythingRecord> files, ref List<MyEverythingRecord> folders) {
 			IntPtr pData = Marshal.AllocHGlobal(sizeof(UInt64) + 0x10000);
-			PInvokeWin32.ZeroMemory(pData, sizeof(UInt64) + 0x10000);
+			PInvokeWin32.ZeroMemory(pData, (IntPtr) (sizeof(UInt64) + 0x10000));
 			uint outBytesReturned = 0;
 
 			while (false != PInvokeWin32.DeviceIoControl(pVolume, PInvokeWin32.FSCTL_ENUM_USN_DATA, medBuffer,
 									sizeof(PInvokeWin32.MFT_ENUM_DATA), pData, sizeof(UInt64) + 0x10000, out outBytesReturned,
 									IntPtr.Zero)) {
-				IntPtr pUsnRecord = new IntPtr(pData.ToInt32() + sizeof(Int64));
+				IntPtr pUsnRecord = new IntPtr(pData.ToInt64() + sizeof(Int64));
 				while (outBytesReturned > 60) {
 					PInvokeWin32.USN_RECORD usn = new PInvokeWin32.USN_RECORD(pUsnRecord);
 
@@ -242,7 +242,7 @@ namespace MyEverything {
 						});
 					}
 
-					pUsnRecord = new IntPtr(pUsnRecord.ToInt32() + usn.RecordLength);
+					pUsnRecord = new IntPtr(pUsnRecord.ToInt64() + usn.RecordLength);
 					outBytesReturned -= usn.RecordLength;
 				}
 				Marshal.WriteInt64(medBuffer, Marshal.ReadInt64(pData, 0));
